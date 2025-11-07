@@ -28,5 +28,6 @@
     
     # ---- Start command ----
     ENTRYPOINT ["/sbin/tini", "--"]
-    CMD ["n8n Start"]
+    CMD ["n8n"]
+    CMD["Start"]
     
