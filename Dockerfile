@@ -1,7 +1,7 @@
 # Use Node.js base image
 FROM node:18-alpine
 
-# Install tini (for process handling)
+# Install tini (for process management)
 RUN apk add --no-cache tini
 
 # Install n8n globally
@@ -10,7 +10,7 @@ RUN npm install -g n8n
 # Set working directory
 WORKDIR /data
 
-# Set environment variables for n8n
+# Environment Variables
 ENV N8N_PORT=${PORT}
 ENV N8N_HOST=0.0.0.0
 ENV N8N_PROTOCOL=https
@@ -20,11 +20,9 @@ ENV N8N_BASIC_AUTH_ACTIVE=true
 ENV N8N_BASIC_AUTH_USER=admin
 ENV N8N_BASIC_AUTH_PASSWORD=admin123
 
-# Expose Render dynamic port
+# Expose dynamic port from Render
 EXPOSE ${PORT}
 
-# Use tini as the entrypoint to manage signals properly
+# Start command (Render-compatible)
 ENTRYPOINT ["/sbin/tini", "--"]
-
-# The correct command to start n8n
 CMD ["n8n", "start"]
