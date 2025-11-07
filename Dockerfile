@@ -23,6 +23,6 @@ ENV N8N_BASIC_AUTH_PASSWORD=admin123
 # Expose dynamic port from Render
 EXPOSE ${PORT}
 
-# Start command (Render-compatible)
-ENTRYPOINT ["/sbin/tini", "--"]
-CMD ["n8n", "start"]
+# Use tini as entrypoint and run n8n
+ENTRYPOINT ["tini", "--"]
+CMD ["n8n"]
