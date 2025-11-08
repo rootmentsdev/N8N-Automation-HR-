@@ -4,8 +4,7 @@
   "description": "Deploy n8n on Render without Docker",
   "main": "server.js",
   "scripts": {
-    "start": "n8n",
-    "postinstall": "npm run build"
+    "start": "n8n"
   },
   "dependencies": {
     "n8n": "^1.43.1"
