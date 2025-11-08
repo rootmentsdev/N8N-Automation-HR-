@@ -10,7 +10,7 @@
     "n8n": "^1.43.1"
   },
   "engines": {
-    "node": "19.x"
+    "node": "<=24"
   },
   "license": "MIT"
 } 
