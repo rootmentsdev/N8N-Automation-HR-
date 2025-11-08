@@ -7,4 +7,5 @@ process.env.N8N_PROTOCOL = 'https';
 process.env.WEBHOOK_URL = 'https://hr-autotest.onrender.com';
 process.env.N8N_EDITOR_BASE_URL = 'https://hr-autotest.onrender.com';
 process.env.NODE_ENV = 'production';
+
 require('n8n');

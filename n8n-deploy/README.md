@@ -1,18 +1,14 @@
-# 🚀 n8n Render Deployment (Without Docker)
+# n8n Render Deployment (Without Docker)
 
-This setup lets you deploy **n8n** to **Render** using a simple Node.js environment instead of Docker.  
-It’s lightweight, faster to build, and easier to maintain.
+Deploy n8n directly to Render without Docker.
 
----
+## Build Command
+npm install
 
-## 🧠 What This Project Does
-- Runs **n8n automation platform** on Render cloud
-- Uses **Node.js environment** instead of Docker
-- Includes **Basic Auth** security (username/password)
-- Works automatically with your Render domain
+## Start Command
+npm start
 
----
+## Default Login
+Username: admin  
+Password: admin123
 
-## ⚙️ Setup Instructions
-
-### 1. Project Structure
