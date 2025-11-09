@@ -1,13 +1,28 @@
-import express from 'express';
-import { createProxyMiddleware } from 'http-proxy-middleware';
-
+// IMPORTANT: Set all n8n environment variables BEFORE any imports
 // Configure n8n for Render deployment
 const PORT = process.env.PORT || 5678;
-const N8N_INTERNAL_PORT = 5679; // Internal port for n8n
+const N8N_INTERNAL_PORT = parseInt(PORT) + 1; // Use PORT + 1 to avoid conflicts
 
-// Set n8n to use internal port
+// Set n8n to use internal port BEFORE any imports
 process.env.N8N_PORT = N8N_INTERNAL_PORT.toString();
 process.env.N8N_HOST = '0.0.0.0';
+
+// Disable queue mode - run in main process mode to avoid Task Broker entirely
+// This is the simplest solution for single-instance deployments
+process.env.EXECUTIONS_PROCESS = 'main';
+process.env.N8N_QUEUE_BULL_REDIS_HOST = '';
+
+// Disable Task Broker completely for single-instance deployment
+// Disable runners to prevent Task Broker from starting
+process.env.N8N_RUNNERS_ENABLED = 'false';
+// Set Task Broker port to a high number to avoid conflicts (even if disabled)
+process.env.N8N_RUNNERS_BROKER_PORT = '56800';
+// Also set the task broker URI to prevent it from trying to bind
+process.env.N8N_RUNNERS_TASK_BROKER_URI = '';
+
+// Now import after environment is configured
+import express from 'express';
+import { createProxyMiddleware } from 'http-proxy-middleware';
 
 // Configure n8n base URL if needed
 if (process.env.RENDER_EXTERNAL_URL) {
