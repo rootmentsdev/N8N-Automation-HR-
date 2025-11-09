@@ -1,1 +1,1 @@
-require('n8n/bin/n8n');
+import 'n8n/bin/n8n';
