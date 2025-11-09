@@ -3,14 +3,15 @@
   "version": "1.0.0",
   "description": "Deploy n8n on Render without Docker",
   "main": "server.js",
+  "type": "module",
   "scripts": {
-    "start": "n8n"
+    "start": "node server.js"
   },
   "dependencies": {
     "n8n": "^1.43.1"
   },
   "engines": {
-    "node": "<=24"
+    "node": ">=18 <24"
   },
   "license": "MIT"
-} 
+}
