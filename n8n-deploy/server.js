@@ -4,8 +4,14 @@ const PORT = process.env.PORT || 5678;
 const N8N_INTERNAL_PORT = parseInt(PORT) + 1; // Use PORT + 1 to avoid conflicts
 
 // Set n8n to use internal port BEFORE any imports
+// IMPORTANT: n8n must use a DIFFERENT port than our Express server
+// Save the original PORT for our Express server
+const EXPRESS_PORT = PORT;
+// Configure n8n to use a different port
 process.env.N8N_PORT = N8N_INTERNAL_PORT.toString();
 process.env.N8N_HOST = '0.0.0.0';
+// Make sure n8n doesn't read the main PORT env var
+// (n8n should only use N8N_PORT)
 
 // Disable queue mode - run in main process mode to avoid Task Broker entirely
 // This is the simplest solution for single-instance deployments
@@ -33,8 +39,9 @@ if (process.env.RENDER_EXTERNAL_URL) {
 
 const app = express();
 
-// Root route handler to fix 404 error
+// Root route handler to fix 404 error - MUST be registered before proxy
 app.get('/', (req, res) => {
+  console.log('Root route hit!'); // Debug log
   res.json({
     status: 'success',
     message: 'HR Notification Service is running',
@@ -50,6 +57,7 @@ app.get('/', (req, res) => {
 
 // Health check endpoint
 app.get('/health', (req, res) => {
+  console.log('Health route hit!'); // Debug log
   res.json({ 
     status: 'healthy',
     service: 'hr-notification',
@@ -57,48 +65,58 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Start n8n in the background
-import('n8n/bin/n8n').then(() => {
-  console.log('n8n started on internal port', N8N_INTERNAL_PORT);
-}).catch((error) => {
-  console.error('Error starting n8n:', error);
-});
+// Start Express server on Render's PORT FIRST
+// This MUST start and bind to the port before n8n starts
+app.listen(EXPRESS_PORT, '0.0.0.0', () => {
+  console.log(`Express server is running on port ${EXPRESS_PORT}`);
+  console.log(`Root endpoint available at http://localhost:${EXPRESS_PORT}/`);
+  console.log(`Health endpoint available at http://localhost:${EXPRESS_PORT}/health`);
+  console.log(`n8n will be proxied from http://localhost:${EXPRESS_PORT}/`);
+  console.log(`n8n internal port: ${N8N_INTERNAL_PORT}`);
+  
+  // Now that Express server is bound to the port, start n8n
+  console.log('Starting n8n...');
+  import('n8n/bin/n8n').then(() => {
+    console.log('n8n started on internal port', N8N_INTERNAL_PORT);
+    
+    // Wait a bit for n8n to fully initialize, then set up proxy
+    setTimeout(() => {
+      // Create proxy middleware that explicitly excludes root and health
+      const proxy = createProxyMiddleware({
+        target: `http://localhost:${N8N_INTERNAL_PORT}`,
+        changeOrigin: true,
+        ws: true, // Enable websocket proxying for n8n
+        logLevel: 'info',
+        onError: (err, req, res) => {
+          // If n8n isn't ready yet, return a helpful message
+          if (err.code === 'ECONNREFUSED') {
+            res.status(503).json({
+              status: 'error',
+              message: 'n8n is starting up, please wait a moment and try again'
+            });
+          } else {
+            res.status(500).json({
+              status: 'error',
+              message: 'Proxy error',
+              error: err.message
+            });
+          }
+        }
+      });
 
-// Wait a bit for n8n to start, then proxy all other requests to n8n
-setTimeout(() => {
-  // Proxy all requests to n8n (except root and health which are handled above)
-  // Express matches specific routes before middleware, so our app.get() routes will work
-  app.use(createProxyMiddleware({
-    target: `http://localhost:${N8N_INTERNAL_PORT}`,
-    changeOrigin: true,
-    ws: true, // Enable websocket proxying for n8n
-    logLevel: 'info',
-    filter: (pathname, req) => {
-      // Don't proxy root and health endpoints (handled by explicit routes above)
-      // Express matches specific routes before middleware, but this ensures we don't proxy these
-      return pathname !== '/' && pathname !== '/health';
-    },
-    onError: (err, req, res) => {
-      // If n8n isn't ready yet, return a helpful message
-      if (err.code === 'ECONNREFUSED') {
-        res.status(503).json({
-          status: 'error',
-          message: 'n8n is starting up, please wait a moment and try again'
-        });
-      } else {
-        res.status(500).json({
-          status: 'error',
-          message: 'Proxy error',
-          error: err.message
-        });
-      }
-    }
-  }));
-}, 2000); // Wait 2 seconds for n8n to start
-
-// Start Express server on Render's PORT
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server is running on port ${PORT}`);
-  console.log(`Root endpoint available at http://localhost:${PORT}/`);
-  console.log(`n8n will be available at http://localhost:${PORT}/`);
+      // Use middleware that checks the path before proxying
+      app.use((req, res, next) => {
+        // Explicitly skip proxy for root and health endpoints
+        if (req.path === '/' || req.path === '/health') {
+          return next(); // Let Express route handlers above handle these
+        }
+        // Proxy all other requests to n8n
+        proxy(req, res, next);
+      });
+      
+      console.log('Proxy middleware configured');
+    }, 3000); // Wait 3 seconds for n8n to fully start
+  }).catch((error) => {
+    console.error('Error starting n8n:', error);
+  });
 });
