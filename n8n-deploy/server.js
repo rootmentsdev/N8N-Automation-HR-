@@ -63,7 +63,7 @@ app.use((req, res, next) => {
 app.use(express.json());
 
 // Root route handler to fix 404 error - MUST be registered before proxy
-app.get('/', (req, res) => {
+app.all('/', (req, res) => {
   console.log('Root route hit!', req.method, req.path); // Debug log
   res.status(200).json({
     status: 'success',
@@ -79,7 +79,7 @@ app.get('/', (req, res) => {
 });
 
 // Health check endpoint
-app.get('/health', (req, res) => {
+app.all('/health', (req, res) => {
   console.log('Health route hit!', req.method, req.path); // Debug log
   res.status(200).json({ 
     status: 'healthy',
@@ -89,7 +89,7 @@ app.get('/health', (req, res) => {
 });
 
 // Test route to verify Express is working
-app.get('/test', (req, res) => {
+app.all('/test', (req, res) => {
   res.status(200).json({ message: 'Express routes are working!' });
 });
 
