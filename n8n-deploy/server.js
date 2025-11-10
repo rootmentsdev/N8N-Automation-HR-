@@ -8,10 +8,13 @@ const N8N_INTERNAL_PORT = parseInt(PORT) + 1; // Use PORT + 1 to avoid conflicts
 // Save the original PORT for our Express server
 const EXPRESS_PORT = PORT;
 // Configure n8n to use a different port
+// CRITICAL: n8n should NOT use the main PORT - it should use N8N_PORT
 process.env.N8N_PORT = N8N_INTERNAL_PORT.toString();
 process.env.N8N_HOST = '0.0.0.0';
-// Make sure n8n doesn't read the main PORT env var
-// (n8n should only use N8N_PORT)
+// Explicitly unset PORT for n8n to prevent it from using the main port
+// We'll restore it just for Express
+const originalPort = process.env.PORT;
+delete process.env.PORT; // Remove PORT so n8n can't use it
 
 // Disable queue mode - run in main process mode to avoid Task Broker entirely
 // This is the simplest solution for single-instance deployments
@@ -39,10 +42,19 @@ if (process.env.RENDER_EXTERNAL_URL) {
 
 const app = express();
 
+// Add request logging middleware to debug
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} - Express received request`);
+  next();
+});
+
+// Add JSON body parser
+app.use(express.json());
+
 // Root route handler to fix 404 error - MUST be registered before proxy
 app.get('/', (req, res) => {
-  console.log('Root route hit!'); // Debug log
-  res.json({
+  console.log('Root route hit!', req.method, req.path); // Debug log
+  res.status(200).json({
     status: 'success',
     message: 'HR Notification Service is running',
     service: 'n8n',
@@ -57,25 +69,39 @@ app.get('/', (req, res) => {
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  console.log('Health route hit!'); // Debug log
-  res.json({ 
+  console.log('Health route hit!', req.method, req.path); // Debug log
+  res.status(200).json({ 
     status: 'healthy',
     service: 'hr-notification',
     timestamp: new Date().toISOString()
   });
 });
 
+// Test route to verify Express is working
+app.get('/test', (req, res) => {
+  res.status(200).json({ message: 'Express routes are working!' });
+});
+
+// 404 handler for unknown routes (but this should come AFTER proxy setup)
+// This will be added after proxy is configured
+
+// Restore PORT for Express (n8n should already be configured with N8N_PORT)
+process.env.PORT = originalPort || EXPRESS_PORT.toString();
+
 // Start Express server on Render's PORT FIRST
 // This MUST start and bind to the port before n8n starts
 app.listen(EXPRESS_PORT, '0.0.0.0', () => {
+  console.log(`========================================`);
   console.log(`Express server is running on port ${EXPRESS_PORT}`);
-  console.log(`Root endpoint available at http://localhost:${EXPRESS_PORT}/`);
-  console.log(`Health endpoint available at http://localhost:${EXPRESS_PORT}/health`);
+  console.log(`Root endpoint: http://localhost:${EXPRESS_PORT}/`);
+  console.log(`Health endpoint: http://localhost:${EXPRESS_PORT}/health`);
+  console.log(`Test endpoint: http://localhost:${EXPRESS_PORT}/test`);
   console.log(`n8n will be proxied from http://localhost:${EXPRESS_PORT}/`);
   console.log(`n8n internal port: ${N8N_INTERNAL_PORT}`);
+  console.log(`========================================`);
   
   // Now that Express server is bound to the port, start n8n
-  console.log('Starting n8n...');
+  console.log('Starting n8n on port', N8N_INTERNAL_PORT, '...');
   import('n8n/bin/n8n').then(() => {
     console.log('n8n started on internal port', N8N_INTERNAL_PORT);
     
@@ -104,14 +130,34 @@ app.listen(EXPRESS_PORT, '0.0.0.0', () => {
         }
       });
 
-      // Use middleware that checks the path before proxying
+      // Use path-based proxy - only proxy paths that start with /rest, /webhook, /api, etc.
+      // This ensures root and health are NEVER proxied
+      const n8nPaths = ['/rest', '/webhook', '/api', '/assets', '/static', '/login', '/signup', '/workflow', '/workflows', '/executions', '/nodes', '/credentials', '/oauth2-credential', '/oauth2', '/me', '/active', '/settings', '/push'];
+      
       app.use((req, res, next) => {
-        // Explicitly skip proxy for root and health endpoints
-        if (req.path === '/' || req.path === '/health') {
-          return next(); // Let Express route handlers above handle these
+        const path = req.path;
+        
+        // NEVER proxy root or health - these are handled by our routes above
+        if (path === '/' || path === '/health') {
+          console.log('Skipping proxy for:', path, '- handled by Express routes');
+          return next(); // Let Express route handlers handle these
         }
-        // Proxy all other requests to n8n
-        proxy(req, res, next);
+        
+        // Only proxy known n8n paths
+        const shouldProxy = n8nPaths.some(n8nPath => path.startsWith(n8nPath));
+        
+        if (shouldProxy) {
+          console.log('Proxying to n8n:', path);
+          proxy(req, res, next);
+        } else {
+          // For unknown paths, return 404 from Express (not n8n)
+          console.log('Unknown path, returning 404:', path);
+          res.status(404).json({
+            status: 'error',
+            message: 'Not Found',
+            path: path
+          });
+        }
       });
       
       console.log('Proxy middleware configured');
