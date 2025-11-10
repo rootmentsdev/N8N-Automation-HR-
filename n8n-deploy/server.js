@@ -29,6 +29,17 @@ process.env.N8N_RUNNERS_BROKER_PORT = '56800';
 // Also set the task broker URI to prevent it from trying to bind
 process.env.N8N_RUNNERS_TASK_BROKER_URI = '';
 
+// n8n Encryption Key - REQUIRED for n8n to start properly
+// If not set in environment, generate a warning but don't fail
+if (!process.env.N8N_ENCRYPTION_KEY) {
+  console.warn('⚠️  WARNING: N8N_ENCRYPTION_KEY is not set!');
+  console.warn('⚠️  n8n requires an encryption key to function properly.');
+  console.warn('⚠️  Set N8N_ENCRYPTION_KEY in Render environment variables.');
+  console.warn('⚠️  Generate one with: openssl rand -base64 32');
+  // Set a temporary key so n8n can at least start (but credentials won't persist)
+  process.env.N8N_ENCRYPTION_KEY = 'temp-key-change-in-production-' + Date.now();
+}
+
 // Now import after environment is configured
 import express from 'express';
 import { createProxyMiddleware } from 'http-proxy-middleware';
@@ -101,9 +112,12 @@ app.listen(EXPRESS_PORT, '0.0.0.0', () => {
   console.log(`========================================`);
   
   // Now that Express server is bound to the port, start n8n
+  // NOTE: Express root route will work even if n8n fails to start
   console.log('Starting n8n on port', N8N_INTERNAL_PORT, '...');
+  console.log('N8N_ENCRYPTION_KEY is', process.env.N8N_ENCRYPTION_KEY ? 'set' : 'NOT SET');
+  
   import('n8n/bin/n8n').then(() => {
-    console.log('n8n started on internal port', N8N_INTERNAL_PORT);
+    console.log('✅ n8n started successfully on internal port', N8N_INTERNAL_PORT);
     
     // Wait a bit for n8n to fully initialize, then set up proxy
     setTimeout(() => {
@@ -163,6 +177,9 @@ app.listen(EXPRESS_PORT, '0.0.0.0', () => {
       console.log('Proxy middleware configured');
     }, 3000); // Wait 3 seconds for n8n to fully start
   }).catch((error) => {
-    console.error('Error starting n8n:', error);
+    console.error('❌ Error starting n8n:', error);
+    console.error('⚠️  Express server is still running and root route should work');
+    console.error('⚠️  Check N8N_ENCRYPTION_KEY and other n8n configuration');
+    // Don't exit - Express server should continue serving root route
   });
 });
