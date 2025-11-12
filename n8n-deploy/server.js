@@ -63,16 +63,17 @@ app.use((req, res, next) => {
 app.use(express.json());
 
 // Root route handler to fix 404 error - MUST be registered before proxy
-app.all('/', (req, res) => {
-  console.log('Root route hit!', req.method, req.path); // Debug log
+app.all('/status', (req, res) => {
+  console.log('Status route hit!', req.method, req.path); // Debug log
   res.status(200).json({
     status: 'success',
     message: 'HR Notification Service is running',
     service: 'n8n',
     version: '1.43.1',
     endpoints: {
-      root: '/',
+      status: '/status',
       health: '/health',
+      test: '/test',
       n8n: '/'
     }
   });
@@ -104,7 +105,7 @@ process.env.PORT = originalPort || EXPRESS_PORT.toString();
 app.listen(EXPRESS_PORT, '0.0.0.0', () => {
   console.log(`========================================`);
   console.log(`Express server is running on port ${EXPRESS_PORT}`);
-  console.log(`Root endpoint: http://localhost:${EXPRESS_PORT}/`);
+  console.log(`Status endpoint: http://localhost:${EXPRESS_PORT}/status`);
   console.log(`Health endpoint: http://localhost:${EXPRESS_PORT}/health`);
   console.log(`Test endpoint: http://localhost:${EXPRESS_PORT}/test`);
   console.log(`n8n will be proxied from http://localhost:${EXPRESS_PORT}/`);
@@ -144,34 +145,18 @@ app.listen(EXPRESS_PORT, '0.0.0.0', () => {
         }
       });
 
-      // Use path-based proxy - only proxy paths that start with /rest, /webhook, /api, etc.
-      // This ensures root and health are NEVER proxied
-      const n8nPaths = ['/rest', '/webhook', '/api', '/assets', '/static', '/login', '/signup', '/workflow', '/workflows', '/executions', '/nodes', '/credentials', '/oauth2-credential', '/oauth2', '/me', '/active', '/settings', '/push'];
+      const expressHandledPaths = new Set(['/status', '/health', '/test']);
       
       app.use((req, res, next) => {
         const path = req.path;
         
-        // NEVER proxy root or health - these are handled by our routes above
-        if (path === '/' || path === '/health') {
-          console.log('Skipping proxy for:', path, '- handled by Express routes');
+        if (expressHandledPaths.has(path)) {
+          console.log('Express handling path, skipping proxy:', path);
           return next(); // Let Express route handlers handle these
         }
         
-        // Only proxy known n8n paths
-        const shouldProxy = n8nPaths.some(n8nPath => path.startsWith(n8nPath));
-        
-        if (shouldProxy) {
-          console.log('Proxying to n8n:', path);
-          proxy(req, res, next);
-        } else {
-          // For unknown paths, return 404 from Express (not n8n)
-          console.log('Unknown path, returning 404:', path);
-          res.status(404).json({
-            status: 'error',
-            message: 'Not Found',
-            path: path
-          });
-        }
+        console.log('Proxying to n8n:', path);
+        proxy(req, res, next);
       });
       
       console.log('Proxy middleware configured');
